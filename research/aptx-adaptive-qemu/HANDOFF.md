@@ -2513,3 +2513,41 @@ A2DP 配置的厂商命令），只是命令集随 OS 不同。Windows 的"支�
 （推测与 AVDTP Media Codec Capabilities 的 vendor ID + codec ID + TLV 形式一致，
 但这属于推断）。另外 `HCI_VS_MSFT_Avdtp_*` 属**厂商自定义 opcode 区间**，
 微软只规定子命令语义，base opcode 由厂商自选并写入注册表。
+
+### 21.27 备选路线尽调：骁龙 X 笔记本的 Linux/NixOS 可行性（2026-09-12）
+
+为回答"是否该买一台高通目录里的骁龙 X 笔记本"（见 §21.26），核对了以下**一手来源**：
+
+- **Canonical "Ubuntu Concept ♥️ Snapdragon X Elite"**（<https://discourse.ubuntu.com/t/48800>，
+  2148 楼、19.2 万浏览、最近活动 2026-09-14）：单个 arm64 镜像，目标是"尽可能多的
+  X Elite 机型 just works"；官方措辞是 **experimental、不适合生产**；"known to work best
+  on the Lenovo ThinkPad T14s"；**Windows 仍是固件更新所必需**；需关 Secure Boot；
+  建议用 USB-C 口；部分固件因不可再分发需从 Windows 提取。
+  近期讨论涉及 7.1.y/7.2.y 分支、HDMI HPD、显示唤醒重启、风扇/EC 控制等。
+  **2026-09-13 的 HP OmniBook Ultra 14-kg0xx（Snapdragon X2 Elite）帖报告"无法启动 +
+  键盘未识别"** ⇒ X2 机型目前支持很差。
+- **`kuruczgy/x1e-nixos-config`**（NixOS for X Elite）：功能矩阵（Yoga Slim 7x /
+  ThinkPad T14s Gen 6）：Wi-Fi ✅、蓝牙 ✅、显示 ✅、键鼠/触控板 ✅、GPU 加速 ✅、
+  麦克风 ✅、NVMe ✅、电池 ✅；**扬声器 🟨（⚠️ 大音量可能损坏扬声器）**、
+  挂起 🟨（可能自唤醒、约 3.8%/小时耗电）；**摄像头 ❌、硬件视频解码 ❌、
+  电源配置 ❌、温控 ❌、TPM ❌、USB-C PCIe ❌**。T14s：>31 GB 内存不可靠；
+  OLED 版需不同 DTB。安装 ISO 的 DTB **硬编码为 Yoga Slim 7x**，其他机型须自建；
+  `nixos-generate-config` 预期不可用；装完还需**在 EFI Shell 里手加启动项**
+  （`bcfg boot add`）；KVM 需 `slbounce` + 从 Windows 取 `tcblaunch.exe`；
+  随机死机可试 `pcie_aspm=off`。
+- **`andre4ik3/nixos-surface-pro-11`**（Surface Pro 11，X Elite）："very early days"，
+  **音频/触控/笔都不工作**，Wi-Fi/蓝牙/GPU 可用；需打补丁的内核 + 在 GRUB 里手写
+  devicetree 行 + 先在 Windows 里准备固件。
+- **`jollheef/nixos-image-thinkpad-t14s-gen6`**：T14s Gen 6 的可 dd 预构建镜像。
+- **nixpkgs issue #399704**（2025-04-18 开、2026-09-06 仍有活动）：**官方 aarch64 ISO
+  在这些机器上不工作**（卡在启动），需要 initrd 模块 + 指定 DTB + 固件；内核维护者
+  的立场是**不接受下游内核分支**，一线支持只能等上游；Fedora 44 已加 DTB 自动探测。
+- **`NixOS/nixos-hardware` 目前没有 x1e/Snapdragon X 模块**（`x1e80100` 代码检索 0 命中；
+  2025-04 合并的 #1444 是 ThinkPad **X13s（8cx Gen 3）**的）。
+
+**结论（对本项目路线的意义）**：买骁龙 X 笔记本能拿到 aptX Adaptive，**但只在 Windows 下**——
+Linux 侧本就没有 AD（§21.22），而**音频恰恰是这些机器在 Linux 下最弱的一环**
+（扬声器有损坏风险/不可用、Surface 上完全没有音频）。因此"为 NixOS 买骁龙 X"与
+"为 aptX Adaptive 买骁龙 X"是**两个互相冲突的目标**：前者目前是 early-days 体验，
+后者要求你留在 Windows。最受支持的机型是 ThinkPad T14s Gen 6 与 Yoga Slim 7x；
+2026 年的 X2 机型（Zenbook A16、HP OmniBook Ultra 等）暂不建议。
