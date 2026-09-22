@@ -2465,3 +2465,51 @@ ARM64 的同名文件含完全相同的 sideband/aptX 字符串（517 120 B）�
    期望值进一步下降**（此前已因 NVM latch 风险降过一次）。
 4. 对 Linux 的含义不变但更硬：BlueZ 既无 A2DP offload 也无 codec id，而这条路径在
    Windows 上都必须靠 IHV 的音频/传输驱动 + 厂商 HCI 命令，Linux 侧没有任何对应物。
+
+**§21.26 附：Windows sideband A2DP offload 的完整通信流程（全部来自微软公开文档）**
+
+单条厂商 HCI 命令承载全部子命令：base opcode 由射频驱动的 INF 写入注册表
+`VsMsftOpCode`，子命令是命令的第一个参数字节。
+
+| 子命令 | 值 | 方向 | 关键参数 | 返回 |
+|---|---|---|---|---|
+| `Read_Supported_Features` | 0x00 | 主机→控制器 | — | 能力位图；**bit 0x80 = 支持 AVDTP offload**，以及微软事件前缀 |
+| `Avdtp_Capabilities_Configuration` | 0x07 | 主机→控制器 | `External_codec_count` + 音频接口侧（音频 DSP）的 codec 块；音频接口参数 | `Internal_codec_count` + **控制器自己的 codec 块**（aptX Adaptive 出现在这里）；音频接口参数 |
+| `Avdtp_Open` | 0x08 | 主机→控制器 | `Connection_handle`、`L2cap_destination_cid`、`L2cap_mtu`、`Configured_codec_capability`、接口参数 | **`Avdtp_offload_handle`**（offload 资源句柄）+ 接口参数 |
+| `Avdtp_Start` | 0x09 | 主机→控制器 | offload 句柄 | status |
+| `Avdtp_Suspend` | 0x0A | 主机→控制器 | offload 句柄 | status |
+| `Avdtp_Close` | 0x0B | 主机→控制器 | offload 句柄 | status |
+
+流程（五层）：
+
+1. **枚举/能力发现**：射频驱动通过 INF 写 `VsMsftOpCode`；Windows 发
+   `Read_Supported_Features` 读能力位；IHV 音频驱动发布
+   `GUID_SIDEBANDAUDIO_A2DP_SUPPORT_INTERFACE`；A2DP profile 驱动对外提供
+   `GUID_DEVINTERFACE_A2DP_SIDEBAND_AUDIO` 供音频驱动打开。
+2. **端点与 codec 能力交换**：音频驱动 `IOCTL_SBAUD_GET_DEVICE_DESCRIPTOR` /
+   `GET_ENDPOINT_DESCRIPTOR(2)` 建 KS filter；用 SIOP 表达支持的 codec；
+   profile 驱动以 `Avdtp_Capabilities_Configuration(0x07)` 把音频侧 codec 与接口参数
+   交给控制器，并取回**控制器侧 codec 列表**（两者都有时**以控制器列表为准**）。
+3. **A2DP/AVDTP 协商**：常规 AVDTP（Discover/GetCapabilities/SetConfiguration 选
+   vendor codec `0xAD`、Open），建立 L2CAP 媒体通道。profile 驱动据控制器能力表判定
+   该 codec 是否 sideband——**aptX Adaptive 只有 sideband 一种形态**。
+4. **开流（分配 offload 资源）**：pin 越过 STOP → 音频驱动 `IOCTL_SBAUD_STREAM_OPEN`
+   → profile 驱动发 `Avdtp_Open(0x08)`（带连接句柄、L2CAP CID/MTU、已配置 codec）
+   → 控制器返回 `Avdtp_offload_handle`，并把实际 MTU / 延迟模式作为 SIOP 回传
+   （这两个 SIOP 是 **AD 专用**）。
+5. **媒体流**：pin 到 RUN → `IOCTL_SBAUD_STREAM_START` → `Avdtp_Start(0x09)`。
+   控制器随后：**从音频传输（I2S/PCM/SLIMbus/SoundWire）接收音频** →
+   编码器在控制器内则自行编码、在音频 DSP 内则直接取出已编码帧 →
+   组装 AVDTP 媒体载荷 → **自己发出 AVDTP 媒体包**。
+   **媒体不经过 HCI**；音频驱动还可通过 `IOCTL_SBAUD_GET_SIOP_UPDATE` 获取
+   延迟模式/采样率变化。暂停/关闭对应 `IOCTL_SBAUD_STREAM_SUSPEND/CLOSE`
+   → `Avdtp_Suspend(0x0A)` / `Avdtp_Close(0x0B)`。
+
+⇒ 这与我们在**手机**上测到的完全同构（手机 HCI 里 0 个 L2CAP 媒体包 + 一条携带
+A2DP 配置的厂商命令），只是命令集随 OS 不同。Windows 的"支持"= 框架 + 厂商实现。
+
+**文档缺口（诚实标注）**：两页文档都引用 "Codec capabilities information" 结构，
+但该章节在页面里**并不存在**；codec 能力块的具体字段未在公开文档中定义
+（推测与 AVDTP Media Codec Capabilities 的 vendor ID + codec ID + TLV 形式一致，
+但这属于推断）。另外 `HCI_VS_MSFT_Avdtp_*` 属**厂商自定义 opcode 区间**，
+微软只规定子命令语义，base opcode 由厂商自选并写入注册表。
