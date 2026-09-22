@@ -2395,3 +2395,73 @@ AX210 **架构同一**。MOMENTUM 5 真实存在且支持 Lossless（MOMENTUM 4 
   已用 fence-aware 的本地检查覆盖 MD009/MD012/MD013/MD022/MD047。
 - **未做**：PipeWire（GitLab）issue #2656 的评论尚未发布——用户本次只要求 GitHub 与
   openaptx 上游；文本已就绪在 `UPSTREAM-PIPEWIRE-2656.md`。
+
+### 21.26 Windows 镜像逆向：Windows 也只是"框架"，aptX Adaptive 同样是 offload（2026-09-12）
+
+**任务**：用户给出两个 25H2 安装镜像（x86_64 / ARM64），要求逆向出 Windows 如何支持
+aptX Adaptive。动机是 PR #16 里作者贴的微软文档（Bluetooth Classic Audio 的 A2DP 表 +
+"仅限配备兼容高通射频的特定设备"脚注）。
+
+**方法**：`7z` 从 ISO 取 `sources/install.wim`（x64 7.58 GB / ARM64 7.32 GB），
+`7z l` 列全量文件名（x64 1 078 907 条）后按名筛选，再定点提取关键 PE 做 `strings`/`objdump`。
+所有提取物在 `~/work/win-re/`（`ex-x64/`、`ex-arm64/`）。
+
+**结果一：两个镜像里都没有任何 aptX 组件。** 文件名含 `aptx` 的条目 **0 个**
+（x64 与 ARM64 皆是）；高通相关条目只有 Wi-Fi FOD 包与 `plutonfw_Qualcomm.dll`（安全固件）。
+
+**结果二：`BthA2dp.sys`（x64 602 112 B，DriverVer 02/16/2026 10.0.26100.7920）自己不做
+aptX Adaptive 编解码，它是一个 offload 框架。** 关键字符串：
+
+```
+AptX Adaptive codec is configured even though it's disabled
+AptX Adaptive sideband codec does not support codec operations in profile driver.
+AptX Adaptive sideband codec does not support decoding in profile driver
+aptX adaptive sideband codec is not available for sink role
+AptXAdaptiveLatencyMode / A2dpAptXAdaptiveLatencyModeChange / AptXAdaptiveNewSamplingHz
+UpdateMtuSizeSiopWorker
+A2dpAvailableOffloadedCodec / A2dpStandardCodecId / A2dpVendorCodecId / A2dpVendorId
+IsA2dpDeviceOffloaded / A2dpOffloadDisabled
+AVDTP Offload : Invalid AVDTP codec Category reported by the controller
+Failed to create inband AAC codec / Failed to create inband SBC codec
+```
+
+要点：**SBC / AAC / aptX 都有 "inband"（驱动内）与 "Sideband" 两种形态，而 aptX Adaptive
+只出现 "sideband" 形态** ⇒ Windows 侧根本没有 AD 编码器。导入表也印证：只有
+`ntoskrnl / HAL / ks.sys / btampm.sys / WppRecorder / WDFLDR / ksecdd`，**没有任何编解码库**。
+ARM64 的同名文件含完全相同的 sideband/aptX 字符串（517 120 B）。
+`BtaMPM.sys`（82 KB）只管媒体状态协调（`BtaMpmUpdatePlayStatus/SuspendStatus`），不含编解码。
+
+**结果三：微软把这套机制完整公开了 —— "Audio Sideband A2DP Offload"。**
+<https://learn.microsoft.com/en-us/windows-hardware/drivers/audio/audio-sideband-a2dp-offload>
+其中原文要点（对我们的问题是决定性的）：
+
+- sideband 的定义：音频"通过替代路径进入蓝牙控制器，而不是常规控制器接口（HCI）"；
+  该路径"通常是 **I2S 或 PCM**，也可以是 **SLIMbus** 甚至 **SoundWire**"。
+- 编解码器"位于**音频 DSP 和/或蓝牙控制器**内"；若在音频 DSP 内，控制器需能从
+  音频传输中取出已编码帧并打包成 AVDTP 媒体包。
+- 主机↔控制器协议是**微软定义的 HCI 厂商命令**（`HCI_VS_MSFT_Avdtp_*`：
+  Capabilities_Configuration=7、Open=8、Start=9、Suspend=0xA、Close=0xB），
+  由 `HCI_VS_MSFT_Read_Supported_Features` 的 **bit 0x80** 声明支持；
+  厂商自定义的 base opcode 由注册表键 **`VsMsftOpCode`** 提供（在射频驱动的 INF 里写）。
+- 音频驱动必须发布接口 `GUID_SIDEBANDAUDIO_A2DP_SUPPORT_INTERFACE`
+  {2BC51EE4-07AF-49CF-B04B-FB3F1C26AADC}；参数用 SIOP 传递，其中
+  **codec-latency-mode-SIOP 与 mtu-size-SIOP"目前只在 aptX Adaptive 激活时使用"**。
+- 微软明确写："A2DP offload is not defined in any Bluetooth SIG standard."
+
+**结果四（直接回答"买高通 M.2 卡行不行"）：微软 Q&A 里对 NFA765（= FastConnect 6900）
+的官方答复是"该芯片没有 aptX Adaptive 支持……不具有 aptX 自适应编解码器"。**
+<https://learn.microsoft.com/zh-cn/answers/questions/4010192/nfa765-win11-aptx-adaptive>
+
+**结论（对本项目）**
+
+1. 这是**第三份独立证据**（继 Android offload、高通白皮书之后）表明：AD 的音频由
+   **主机栈之外**产生，主机只做 AVDTP 信令与少量控制。Windows 的实现路径与 Android 同构。
+2. **Windows 不能作为"主机侧 AD 编码器"的来源**——镜像里根本没有该编码器，
+   也没有可移植的实现（§21.22 的 Linux 侧结论再次被印证）。
+3. Windows 上 AD 的成立条件比"有高通射频"更苛刻：还需要
+   ①IHV 音频 DSP 驱动（发布 sideband 接口）②控制器支持 `HCI_VS_MSFT_Avdtp_*`
+   ③**音频 DSP 与蓝牙控制器之间的 sideband 音频总线（I2S/PCM/SLIMbus/SoundWire）**。
+   x86 笔记本上 DIY 换一张 M.2 卡**不提供**③ ⇒ **"QCNCM865 + Win11 24H2"这条路的
+   期望值进一步下降**（此前已因 NVM latch 风险降过一次）。
+4. 对 Linux 的含义不变但更硬：BlueZ 既无 A2DP offload 也无 codec id，而这条路径在
+   Windows 上都必须靠 IHV 的音频/传输驱动 + 厂商 HCI 命令，Linux 侧没有任何对应物。

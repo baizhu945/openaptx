@@ -798,15 +798,27 @@ independent reasons, in increasing order of force:
    still the wrong purchase here, but for the structural reason in item 1: it
    cannot deliver aptX Adaptive on Linux either, and its Wi-Fi 6E is no better
    than the AX210's.
-3. **The one configuration the vendors document is a Windows path.** Microsoft's
-   own Windows 11 A2DP table lists aptX Adaptive only "on select Windows
-   devices with compatible Qualcomm Bluetooth radios", so a plain Windows
-   install on the existing AX210 would give aptX Classic at best -- worse than
-   the aptX HD that already works here on Linux. The Qualcomm-radio + Windows
-   11 24H2 combination is the only laptop configuration the documents support,
-   and it is not a Linux fix; worse, booting Windows can latch firmware state in
-   the card's NVM that then breaks Linux Bluetooth audio (fix unmerged as of
-   7.3-rc2).
+3. **The one configuration the vendors document is a Windows path -- and it
+   needs more than a Qualcomm radio.** Microsoft's own Windows 11 A2DP table
+   lists aptX Adaptive only "on select Windows devices with compatible
+   Qualcomm Bluetooth radios", so a plain Windows install on the existing AX210
+   would give aptX Classic at best -- worse than the aptX HD that already works
+   here on Linux. Reverse-engineering both 25H2 images settles what that
+   footnote means: neither ISO contains any aptX component, and the inbox A2DP
+   driver (`BthA2dp.sys`) says in its own strings that aptX Adaptive exists
+   *only* as a "**sideband codec**" for which the profile driver does "not
+   support codec operations". Microsoft documents the rest: an audio sideband
+   A2DP offload in which audio reaches the controller over "an I2S or PCM
+   interface ... or SLIMbus ... or SoundWire" rather than HCI, with the codec
+   inside the audio DSP or the controller, driven by Microsoft-defined
+   `HCI_VS_MSFT_Avdtp_*` vendor commands. A DIY M.2 swap on an x86 laptop
+   supplies none of that sideband audio path, and Microsoft's own answer for
+   the NFA765 says that card "does not have the aptX Adaptive codec". The
+   Qualcomm-radio + Windows 11 24H2 combination is therefore weaker than it
+   looked, and it is not a Linux fix in any case; worse, booting Windows can
+   latch firmware state in the card's NVM that then breaks Linux Bluetooth
+   audio (fix unmerged as of 7.3-rc2). Section 21.26 of the handoff log has the
+   strings, the extraction paths and the sources.
 
 On the mechanism itself, what is documented and what is inferred must be kept
 apart. Qualcomm's own Snapdragon Sound whitepaper says, verbatim: "a 4dB gain
