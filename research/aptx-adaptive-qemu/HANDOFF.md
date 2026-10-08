@@ -2551,3 +2551,49 @@ Linux 侧本就没有 AD（§21.22），而**音频恰恰是这些机器在 Linu
 "为 aptX Adaptive 买骁龙 X"是**两个互相冲突的目标**：前者目前是 early-days 体验，
 后者要求你留在 Windows。最受支持的机型是 ThinkPad T14s Gen 6 与 Yoga Slim 7x；
 2026 年的 X2 机型（Zenbook A16、HP OmniBook Ultra 等）暂不建议。
+
+### 21.28 PR #16 最新评论（AndyCruz08，2026-10-07）与 ESP32-SDR 路线的核实
+
+**评论要点**：① Windows 的 AD 支持确实只在骁龙 PC 上（与 §21.26/§21.27 一致）；
+② 建议用 **ESP32 当 2.4/5 GHz SDR** 来测 PHY 层，给了两个仓库链接。
+
+**核实结果（读了两仓库与 ESPARGOS 官方站，均为原文）**：
+
+| 能力 | 数值 | 来源 |
+|---|---|---|
+| **接收（任意 ESP32 芯片）** | 调谐 **2.2–2.7 GHz**（5 GHz 仅 ESP32-C5）、**模拟带宽 ~13–54 MHz**、采样率最高 **80 MSa/s**、10-bit I/Q | [espargos.net/espsdr](https://espargos.net/espsdr/) |
+| 普通芯片模式 | **突发式低占空比** capture + 片上 FFT（浏览器 WebSDR 可看） | 同上 |
+| **ESP32-S3** | USB 连续抽取流 **250 → 15.625 kSa/s**（±125 kHz 窄带），配 [esp-sdr-bridge](https://github.com/z2labs/esp-sdr-bridge) 可接 SDR++/Gnu Radio | [esp-sdr README](https://github.com/ESPARGOS/esp-sdr) |
+| **ESP32-S31**（Function-CoreBoard） | **连续 20 MSa/s（USB）/ 40 MSa/s（以太网）**，8-bit I/Q，SoapySDR，**仅接收** | [SoapyESPSDR](https://github.com/ESPARGOS/SoapyESPSDR) |
+| **ESPARGOS One** | 8 天线相位相干阵列；**350 € Core Kit，仅 EU 专业客户**（报价制） | [buy.espargos.net](https://buy.espargos.net/) |
+| **发射** | FAQ 原文：任意信号发射"**Yes, this is also possible**"（ESPARGOS One 甚至相位相干），但"**we are not providing a transmitter implementation at this time due to the potential for misuse**"（干扰等） | espargos.net FAQ |
+| ESP32-S3 发射的**现有**实现 | 极化调制：频率 459 Hz 步进/40 kHz 刷新 + 幅度 0.28 dB 步进/18 dB 范围 → 实测载波、FSK(≤5 kHz)、窄带 FM、**SSB 语音**；**窄带**，非任意宽带波形。作者注明发射需业余无线电执照 | [esp32-sdr-trx](https://github.com/jochenhammes/esp32-sdr-trx) |
+| 芯片内 **raw I/Q 发射引擎**（SRAM 回放，最高 80 Msps） | 由 h0m3us3r 发现，该仓库称"已复现"但**其发射机尚未使用**；属研究阶段 | 同上（TX-RESEARCH.md Stage 5/6） |
+
+**结论（对"我的硬件是否能发射 AD"这一问的回答）**：
+
+1. **接收侧：便宜且可用**。一块 ~¥25–60 的 ESP32（S3/C5/初代）就能看 2.4 GHz 全段的
+   原始 IQ/频谱（13–54 MHz 带宽），**这正好是 §21.23 里我一直建议、但当时以为要
+   ¥600–900 SDR 的那次测量**。成本从 ~¥800 降到 ~¥30。
+2. **发射侧：不是一条现实路径**。ESPARGOS **故意不提供**发射实现（防滥用）；
+   现有 ESP32 发射实现是**窄带极化调制**（FM/SSB），带宽只有几 kHz 量级，
+   无法产生 BT/QHS 那样的宽带波形；芯片内 raw I/Q 发射引擎虽有发现，
+   但属未产品化的研究，且需自行逆向 + 执照问题。
+3. 因此**"用 ESP32 发 AD"不能替代"用厂商硅片发 AD"**；但**"用 ESP32 看清 AD 到底
+   是什么"现在完全可行**。这会把 §21.23 的推断从"嗅探器看不见"升级为
+   "知道它到底长什么样"，而且**不依赖 Ubertooth 的 LAP 识别**（无假设观测）。
+
+**下一步计划（P1–P5）**：
+- **P1（~¥30–150，1–2 天）**：买 ESP32-S3（连续窄带流 + 宽带突发）与可选 ESP32-C5
+  （5 GHz 对冲）；用官方浏览器烧录器 + WebSDR 做四组对照：手机空闲 / 手机播 AD /
+  本机播 aptX HD（已知标准参考）/ 本机播 AD。判据：**播放时是否出现与播放同步的
+  发射？占用带宽多少？是否像标准 GFSK？**
+- **P2（若出现异常发射）**：用 S31 板（连续 20–40 MSa/s）或 Pluto/HackRF（~¥600–900）
+  录 IQ，分析调制方式/符号率/帧结构/跳频。
+- **P3（决策点）**：若测得**标准 BR/EDR** ⇒ §21.23 的"不可见"结论作废，问题回到
+  可修的软件/握手层（好消息）；若为**非标准调制** ⇒ 只剩厂商硅片（BT11／骁龙本）
+  或"从零自研 SDR 发射"（研究级、无现成实现、有执照与滥用顾虑，建议不做）。
+- **P4（零成本）**：把上述能力数据与我们的 307 s 零命中 + 同场阳性对照回复到 PR 评论，
+  并向 @AndyCruz08 求证 ESP-SDR 是否有人用于 BT/AD 观测。
+- **P5（并行）**：务实的可用路径不变——BT11（可内置化）、骁龙 X 笔记本（跑 Windows）、
+  aptX HD / LE Audio。
