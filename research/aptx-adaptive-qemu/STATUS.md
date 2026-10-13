@@ -77,6 +77,13 @@ What is now proven:
    0.7 to 1.6 hits/s, this host's own Adaptive stream at 0.52 hits/s, and the
    same link idle at 0.02 hits/s. Had the phone's link emitted like the control,
    215 to 460 hits were expected (section 7.3).
+9. **The same phone, at the same distance, is plainly visible with a standard
+   codec and invisible with Adaptive.** A raw-IQ receiver (ESP32-C5 running
+   ESP-SDR) that decodes no protocol at all sees the phone's SBC link in 21.5 %
+   of captures and its AAC link in 11.5 %, while the same phone, position and
+   track on aptX Adaptive reads 3.0 % against 2.5 % for silence -- a difference
+   of p=0.76. This removes the address-recognition assumption from finding 7
+   (section 7.5).
 8. **The working sources never send Adaptive media from the host.** The
    phone's HCI log has no L2CAP media packets at all; right after AVDTP Start
    it hands the A2DP configuration to its Qualcomm controller with one vendor
@@ -687,6 +694,38 @@ RFCOMM channel 11, vendor `0x0495`). `GET_ANC_STATUS` (`0x1A05`) answers
 `0x1B05`; the GAIA core ids (`0x0300`/`0x0301`/`0x0304`) return the
 unsupported-with-error form `0x03xx|0x0180`. The phone's Sennheiser app holds
 this channel, so a second reader gets `EBUSY` until it is closed.
+
+### 7.5 The same phone, same position, only the codec changed
+
+The air measurements in 7.1 rested on a sniffer that has to recognise a
+Bluetooth address to report anything. To remove that assumption the link was
+observed with a raw-IQ receiver instead: an ESP32-C5 running ESP-SDR, which
+streams the 2.4 GHz band without decoding any protocol. The detector is a
+narrowband-burst measure: in every capture, the largest rise of a 1 MHz band
+above its own 8 MHz neighbourhood, after DC removal. Each state is
+200 captures of 819 us at 2441 MHz, taken at 20 MSa/s with an 11 MHz analog
+filter and a fixed manual gain.
+
+| state | captures with a burst >6 dB | z vs idle | p |
+| --- | --- | --- | --- |
+| phone, SBC, 30-50 cm (standard EDR) | **43/200 = 21.5 %** | 5.85 | 5e-09 |
+| phone, AAC, 30-50 cm (standard EDR) | **23/200 = 11.5 %** | 3.53 | 4e-04 |
+| this host, aptX HD, ~0.5 m (standard EDR) | **32/200 = 16.0 %** | 4.66 | 3e-06 |
+| **phone, aptX Adaptive, 30-50 cm** | **6/200 = 3.0 %** | **0.31** | **0.76** |
+| nothing playing | 5/200 = 2.5 % | - | - |
+
+Every standard-EDR link in the room is plainly visible, including the same
+phone at the same distance playing the same track. Switching that phone to
+aptX Adaptive makes the link **statistically indistinguishable from silence**.
+No address decoding is involved: the only thing that changed between the 21.5 %
+and the 3.0 % row is the codec.
+
+Two caveats belong with the table. At centimetre range the receiver front end
+compresses (SBC measured 5.0 % there), so only the 30-50 cm rows are valid. And
+the detector is deliberately narrowband, so it shows that Adaptive media is not
+standard-EDR bursts; it does not by itself exclude a wideband emission in the
+same band, which needs a multi-scale detector and has not been measured yet.
+The 5 GHz band has not been checked either.
 
 ## 8. Reference data
 
