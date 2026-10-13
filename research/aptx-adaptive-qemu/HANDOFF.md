@@ -2962,3 +2962,10 @@ capabilities（`adaptive_init_caps`）与协商结果（在 `peer.cap_ext_ver_nu
 当年在别的配置下、或经由 R3/lossless 路径观察到的）。因此
 "**sink 期望标准 14/16/19 ms 周期**"这一假设**目前没有可用杠杆去验证**，除非深入改
 CAPI 模块/helper 的 profile 与周期处理（工程量远大于本轮）。
+
+### 21.39 已向上游发出评论（2026-10-13 23:05）
+
+PR #16 新评论：<https://github.com/arkq/openaptx/pull/16#issuecomment-6148621988>
+（原文 `UPSTREAM-PR16-SOURCETYPE.md`）。内容：theacrat 配方在 R2.2 sink 上的完整实测
+（爆音/塌陷指纹/已测参数矩阵/周期假设无法验证），并向他提两个具体问题
+（他那边 sink 的 `cap_ext_ver_num` 与空口包周期；他的"1/3 实时速率"是否也曾完全塌陷）。
