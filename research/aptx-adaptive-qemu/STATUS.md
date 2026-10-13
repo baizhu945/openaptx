@@ -80,10 +80,11 @@ What is now proven:
 9. **The same phone, at the same distance, is plainly visible with a standard
    codec and invisible with Adaptive.** A raw-IQ receiver (ESP32-C5 running
    ESP-SDR) that decodes no protocol at all sees the phone's SBC link in 21.5 %
-   of captures and its AAC link in 11.5 %, while the same phone, position and
-   track on aptX Adaptive reads 3.0 % against 2.5 % for silence -- a difference
-   of p=0.76. This removes the address-recognition assumption from finding 7
-   (section 7.5).
+   of captures, its AAC link in 11.5 % and this host's aptX HD link in 16.0 %,
+   while the same phone, position and track on aptX Adaptive never rises out of
+   the ambient band: repeat passes read 3.0 to 10.5 %, silence reads 2.5 to
+   6.7 %, and a paired play/pause run read 4.3 % playing against 6.7 % paused.
+   This removes the address-recognition assumption from finding 7 (section 7.5).
 8. **The working sources never send Adaptive media from the host.** The
    phone's HCI log has no L2CAP media packets at all; right after AVDTP Start
    it hands the A2DP configuration to its Qualcomm controller with one vendor
@@ -720,12 +721,25 @@ aptX Adaptive makes the link **statistically indistinguishable from silence**.
 No address decoding is involved: the only thing that changed between the 21.5 %
 and the 3.0 % row is the codec.
 
-Two caveats belong with the table. At centimetre range the receiver front end
-compresses (SBC measured 5.0 % there), so only the 30-50 cm rows are valid. And
-the detector is deliberately narrowband, so it shows that Adaptive media is not
+Repeat runs put a number on how much the room itself varies. The same Adaptive
+state measured 3.0 %, 6.5 %, 9.5 %, 10.5 % and 4.3 % on different passes, while
+the silence baseline moved between 2.5 % and 6.7 %; a paired run taken back to
+back in one sitting (300 captures playing, then 300 paused, phone untouched)
+read **4.3 % playing against 6.7 % paused**, i.e. the paused leg had more bursts
+than the playing one. The small excess seen in earlier passes was therefore
+ambient, not media. What survives is the discrimination that matters: every
+standard-EDR link stays well above that ambient band (SBC 21.5 %, this host's
+aptX HD 16.0 %, AAC 11.5 %), while Adaptive never rises out of it.
+
+Three caveats belong with the table. At centimetre range the receiver front end
+compresses (SBC measured 5.0 % there), so only the 30-50 cm rows are valid. The
+detector is deliberately narrowband, so it shows that Adaptive media is not
 standard-EDR bursts; it does not by itself exclude a wideband emission in the
-same band, which needs a multi-scale detector and has not been measured yet.
-The 5 GHz band has not been checked either.
+same band, which needs a multi-scale detector and has not been measured yet. And
+the ESP32 sits on the machine under test, so this host's own Wi-Fi and Bluetooth
+are in-band interferers whose traffic varies with whatever the machine is doing;
+they have to be held constant across a comparison, or the receiver moved away
+from them. The 5 GHz band has not been checked either.
 
 ## 8. Reference data
 
