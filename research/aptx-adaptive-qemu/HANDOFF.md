@@ -2908,3 +2908,30 @@ fork master 已推送；模块 rev 更新；drop-in 设为
 **尚未验证的候选解释**（下一步若要继续）：sink 在 source type 2 模式下可能期望
 **标准的 HQ/LL 包周期**（theacrat 的例子是 14 ms HQ / 10 ms LL），而我们的流是
 25 ms / 676 B；周期不匹配可能让 sink 的抖动缓冲持续欠载并最终停止收包。
+
+### 21.37 包周期实验：免重建的覆盖够不到 CIE，16 ms 假设仍未测
+
+**假设**：sink 在 source type 2 模式下可能期望标准 HQ/LL 包周期（theacrat 的例子是
+14 ms），而我们的流是 25 ms/676 B；周期不匹配可能导致抖动缓冲持续欠载、最终停收。
+
+**尝试的免重建路径**：插件支持 `APTX_ADAPTIVE_CONFIG_STREAM_HEX`（覆盖交给 helper 的
+R2 流，首字节即 `cap_ext_ver_num`）。把首字节从 `01` 改成 `00`
+（`009200000f0203030300aa`），配合完整配方（`SOURCE_TYPE=0x02`+`TS_CONSTANT=1`+
+`SSRC=0xA3`）重测。
+
+**结果：覆盖未生效** —— 空口包仍是 `dlen 680`（= L2CAP 4 + 676 B 帧，即 25 ms 周期；
+16 ms 应为 ~430 B）。逐秒形态同前：t=1 s 38 包 → t=2 s 13 包 → 之后塌到 1 包/秒。
+
+**原因**（读代码确认）：包周期由**协商出的** `cap_ext_ver_num` 决定
+（`a2dp-codec-aptx-adaptive.c` 第 944/995 行：`peer.cap_ext_ver_num == 0` 才取 0），
+而 `CONFIG_STREAM_HEX` 只改 helper 内部的 `r2_stream`，改不到我们**广告出去的 CIE**
+（第 199 行 `caps->cap_ext_ver_num = APTX_ADAPTIVE_CAP_EXT_VER_NUM` 是编译期常量）。
+⇒ 要强制 16 ms 必须给插件加一个 CIE 级 env 开关并**再重建一次 PipeWire**。
+
+**另外的坑**：模块的 `systemd.user.services.*.serviceConfig.UnsetEnvironment` 里有
+`APTX_ADAPTIVE_CONFIG_STREAM_HEX`，会清掉 drop-in 设的值；临时实验时需在 drop-in 里
+用空的 `UnsetEnvironment=` 重置该列表（本轮已用完复原）。
+
+**结论**：周期假设**仍未验证**，需要一次以 CIE 为目标的改动 + 重建。其余配方要素
+（source type 2 / 常值时间戳 / SSRC=HQ / 0x64 目标延迟）均已测，M5（R2.2）上
+表现为"第一秒满速、随后断流"。
