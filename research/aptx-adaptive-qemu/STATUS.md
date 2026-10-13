@@ -731,12 +731,24 @@ ambient, not media. What survives is the discrimination that matters: every
 standard-EDR link stays well above that ambient band (SBC 21.5 %, this host's
 aptX HD 16.0 %, AAC 11.5 %), while Adaptive never rises out of it.
 
+A later pass with the ESP32 moved a metre away from this machine, and with DC
+removed before measuring power, closed the remaining gap. In a back-to-back
+pair (200 captures each) Adaptive playback read 3.5 % against 4.0 % for pause
+on the burst detector, and the DC-removed power was -44.6 dB against -44.4 dB
+-- identical. The mean power spectrum over the middle 16 MHz differed by
++0.36 dB with no structure, which also rules out a *wideband* emission in that
+window, since a mean power spectrum rises for broadband energy just as it does
+for narrowband. One earlier observation is retracted with it: the "extra 5 to
+7 dB of in-band power while playing" was the front end's DC/leakage point
+moving when a nearby transmitter was active. Raw RMS includes that DC term, so
+it invented a signal; DC-removed power and the mean power spectrum show none.
+
 Three caveats belong with the table. At centimetre range the receiver front end
 compresses (SBC measured 5.0 % there), so only the 30-50 cm rows are valid. The
 detector is deliberately narrowband, so it shows that Adaptive media is not
 standard-EDR bursts; it does not by itself exclude a wideband emission in the
-same band, which needs a multi-scale detector and has not been measured yet. And
-the ESP32 sits on the machine under test, so this host's own Wi-Fi and Bluetooth
+same band, which needs a multi-scale detector and is now covered: the mean power
+spectrum shows nothing. And the ESP32 initially sat on the machine under test, so this host's own Wi-Fi and Bluetooth
 are in-band interferers whose traffic varies with whatever the machine is doing;
 they have to be held constant across a comparison, or the receiver moved away
 from them. The 5 GHz band has not been checked either.
