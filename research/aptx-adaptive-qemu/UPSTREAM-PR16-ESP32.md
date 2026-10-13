@@ -1,41 +1,76 @@
 Following the ESP32-as-SDR suggestion in this thread, we ran the measurement with
-an ESP32-C5 (ESP-SDR / ESPARGOS raw-IQ firmware, receive only, no protocol
-decoding) and added the control that our earlier sniffer-based capture could not
-provide: the same phone, at the same distance, playing the same track, with only
-the Bluetooth codec changed.
+an ESP32-C5 running the ESP-SDR (ESPARGOS) raw-IQ firmware. It receives 2.4 and
+5 GHz without decoding any protocol, which removes the address-recognition
+assumption our earlier sniffer result rested on, and it let us add the control
+that matters: the same phone, at the same distance, playing the same track, with
+only the Bluetooth codec changed.
 
-Method: 200 burst captures per state, 819 us each, at 2441 MHz (20 MSa/s, 11 MHz
-analog filter, fixed manual gain). Detector: per capture, the largest rise of a
-1 MHz band above its own 8 MHz neighbourhood, after DC removal; states compared
-by the fraction of captures with a burst >6 dB.
+**Method.** Burst captures of 819 us at 20 MSa/s with an 11 MHz analog filter and
+a fixed manual gain, 200-300 captures per leg, at 2441 MHz for 2.4 GHz. Two
+statistics per capture: the rise of a 1 MHz band over its own 8 MHz neighbourhood
+("burst", a narrowband detector), and DC-removed power. A power-domain mean
+spectrum is accumulated as well, since it responds to wideband energy too.
 
-| state | bursts >6 dB | z vs idle | p |
-| --- | --- | --- | --- |
-| phone, SBC, 30-50 cm (standard EDR) | 43/200 = 21.5 % | 5.85 | 5e-09 |
-| phone, AAC, 30-50 cm (standard EDR) | 23/200 = 11.5 % | 3.53 | 4e-04 |
-| host, aptX HD, ~0.5 m (standard EDR) | 32/200 = 16.0 % | 4.66 | 3e-06 |
-| phone, aptX Adaptive, 30-50 cm | 6/200 = 3.0 % | 0.31 | 0.76 |
-| nothing playing | 5/200 = 2.5 % | - | - |
+**2.4 GHz, phone at 30-50 cm, only the codec changed**
 
-So every standard-EDR link in the room is plainly visible, including the same
-phone at the same distance, while the same phone on aptX Adaptive is
-statistically indistinguishable from silence (3.0 % vs 2.5 %, p=0.76; SBC vs
-Adaptive z=5.64, p=2e-08). This reproduces our earlier null result without
-relying on address recognition: the receiver decodes nothing, and the only
-variable between the 21.5 % and the 3.0 % row is the codec.
+| state | captures with a burst >6 dB |
+| --- | --- |
+| phone, SBC (standard EDR) | 43/200 = 21.5 % |
+| phone, AAC 44.1 kHz (standard EDR) | 23/200 = 11.5 % |
+| this host, aptX HD at ~0.5 m (standard EDR) | 32/200 = 16.0 % |
+| phone, aptX Adaptive | 6/200 = 3.0 % (repeat passes: 6.5 %, 9.5 %, 10.5 %, 4.3 %) |
+| silence | 5/200 = 2.5 % (repeat: 2.5 %, 6.7 %, 1.3 %) |
 
-Two limits we want to be explicit about. At centimetre range the front end
-compresses (SBC reads 5.0 % there), so only the 30-50 cm rows are valid. And the
-detector is deliberately narrowband: it shows Adaptive media is not standard-EDR
-bursts, but it does not by itself exclude a wideband emission in the same band --
-that needs a multi-scale detector, which we have not run yet. The 5 GHz band is
-also unchecked.
+The Adaptive passes scatter and overlap the silence passes, which is what a null
+looks like once the room is allowed to drift; the standard-EDR rows sit clearly
+above both. In a strictly paired run, taken back to back in one sitting with the
+phone untouched, Adaptive read 4.3 % playing against 6.7 % paused.
 
-On the transmitting side, to save anyone else the time: ESP-SDR is receive-only
-by design ("we are not providing a transmitter implementation at this time"), and
-the ESP32 transmit work that exists is narrowband polar modulation (FM/SSB), not
-an arbitrary wideband waveform. So an ESP32 cannot stand in for the vendor
-silicon that appears to be required at the source end.
+**A retraction, because it cost us a day.** An earlier pass of ours reported
+"5 to 7 dB more in-band power while playing, consistent with a wideband
+emission." That was an artefact. Raw RMS includes the front end's DC/leakage
+term, and that term moves when a nearby transmitter is active, so it invents
+signal. With DC removed, a paired run gives:
 
-Raw data and scripts: https://github.com/baizhu945/openaptx (branch
-research/aptx-adaptive-final), research/aptx-adaptive-qemu/STATUS.md section 7.5.
+| metric | Adaptive playing | paused |
+| --- | --- | --- |
+| burst >6 dB | 7/200 = 3.5 % | 8/200 = 4.0 % |
+| raw RMS | -37.0 dB | -42.4 dB |
+| DC-removed power | **-44.6 dB** | **-44.4 dB** |
+| mean power spectrum, middle 16 MHz | **+0.36 dB**, no structure | - |
+
+The mean power spectrum matters here: a *wideband* emission raises it just as a
+narrowband one raises a few bins, and it shows nothing. So within this window
+Adaptive playback is not distinguishable from silence in burst rate, in
+DC-removed power, or in spectral shape.
+
+**5 GHz.** This branch needed its own control, because the narrowband detector is
+blind to Wi-Fi-shaped energy. This host's Wi-Fi was associated on channel 44
+(5220 MHz) a metre from the receiver; a sustained download moved that window from
+-55.1 dB to -45.6 dB (+9.5 dB median, +12.8 dB at p90) and raised the mean power
+spectrum by +12.4 dB, so an emission of that order at that range would have been
+seen. During Adaptive playback, six 20 MHz windows across 5180-5825 MHz showed
+nothing: 0.0 % bursts at every centre, power differences against idle between
++0.4 and -5.7 dB with the playing legs *quieter*, and a strictly paired repeat at
+5500 and 5745 MHz disagreeing in sign (-4.3 dB and +1.9 dB). About 120 MHz of the
+band was covered rather than all of it, and the headset has no 5 GHz radio to
+begin with, so this closes a low-probability branch rather than a live one.
+
+**On transmitting.** ESP-SDR is receive-only by design ("we are not providing a
+transmitter implementation at this time"), and the ESP32 transmit work that does
+exist is narrowband polar modulation (FM/SSB), not an arbitrary wideband
+waveform, so an ESP32 cannot stand in for the vendor silicon that appears to be
+required at the source end. What it can do, cheaply, is show what is actually on
+the air, which is what we used it for.
+
+**Limits.** The burst detector is deliberately narrowband (the mean power
+spectrum covers the wideband case). One receive centre at 2.4 GHz, 819 us
+windows, so roughly 20 of the 79 channels per window -- though standard-EDR codecs
+from the same phone were visible in that same window, so the phone's channel map
+does include it. At centimetre range the front end compresses and even SBC reads
+only 5 %, so comparisons have to be taken at 30-50 cm and in pairs, since the
+ambient band itself drifts between roughly 1 % and 7 %.
+
+Raw data, scripts and the write-ups: research/aptx-adaptive-qemu/STATUS.md
+sections 7.1-7.5 and HANDOFF.md sections 21.29-21.33, branch
+research/aptx-adaptive-final.
