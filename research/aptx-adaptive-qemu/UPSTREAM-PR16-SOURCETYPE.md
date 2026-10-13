@@ -1,46 +1,60 @@
-Following up on the recipe in the comment above (source type 2, constant RTP
-timestamp, non-zero target latency): I tested it end to end on an R2.2 sink and it
-does not transfer, so the numbers may save someone else the experiment.
+Thanks for the recipe. The source-type observation is the most useful lead this
+thread has had, so I spent today testing it end to end on a different sink. Short
+version: on an R2.2 sink it does open the audio path, but the link dies within a
+second or two. Details below in case they help you or anyone else.
 
-Setup: Sennheiser MOMENTUM 5 (advertises the R2 extension, feature word
-0x0f000092), Intel AX210, BlueZ 5.87, PipeWire 1.7.0 with our aptX Adaptive codec
-plugin. I implemented the constant timestamp as an option: with it enabled the
-plugin sends `timestamp = samples per channel in this packet` (1200 = 0x4B0 for
-our 25 ms / 676-byte frames at 48 kHz, upper 16 bits zero) and I set the AVDTP
-configuration byte you describe as byte 6 to 0x12 (48 kHz + source type 2). Our
-target-latency byte was already 0x64, i.e. 200 ms in 2 ms units, and our SSRC is
-0; I did not try SSRC 0xA3.
+Setup: Sennheiser MOMENTUM 5 (R2.2, ext-ver 1 in its capabilities) from an Intel
+AX210, stock BlueZ 5.87 and PipeWire 1.7.0 with our bridge, which runs the
+Qualcomm CAPI encoder under qemu-hexagon. The AVDTP configuration we send is
+byte-identical to what a Snapdragon phone sends to this headset.
 
-Result, A/B in one sitting with everything else held identical (same headset
-connection, same 440 Hz source, re-paired immediately before each leg, PipeWire
-reporting `api.bluez5.codec = "aptx_adaptive"` in both legs):
+Your three points, as environment switches (all off by default, so the deployed
+wire format is unchanged):
 
-| configuration | encoder output | air traffic (controller ACL counters) |
-| --- | --- | --- |
-| source type 2 + constant timestamp | 26.9 kB/s, 40 packets/s | **~0.9 kB/s, ~1.4 packets/s** |
-| source type 0 + running timestamp | 27 kB/s, 40 packets/s | **27.4 kB/s, 40 packets/s** |
+- `APTX_ADAPTIVE_SOURCE_TYPE` (already existed): the low bits of config byte 6,
+  `0x00` or `0x02`.
+- `APTX_ADAPTIVE_TS_CONSTANT` (new): the RTP timestamp becomes the packet's
+  samples per channel (1200 for our 25 ms / 48 kHz frames), high 16 bits zero.
+- `APTX_ADAPTIVE_SSRC` (new): 0 by default, which is what the phone sends; 0xA3
+  for HQ.
 
-The encoder keeps producing frames at the right rate and period in both legs; what
-changes is that with source type 2 the sink stops accepting them. This is not
-silence-with-flow, it is a stall: the ACL counter collapses to about one 680-byte
-packet per second and PipeWire logs a transport failure on that node. Neither leg
-produced audio on this sink.
+Your point 3 we already satisfied: our configuration carries 0x64 in the TTP byte.
 
-It is also not the timestamp mode. We hit the same stall earlier with source type
-2 and a *running* timestamp, which is why the plugin had been sending source type
-0 (0x10 at 48 kHz) since then. With source type 0 the stream runs cleanly at 40
-packets/s, 676 bytes every 25 ms, and the sink still plays nothing -- the
-behaviour this PR is about.
+What we measured (btmon, counting `< ACL: Handle 256`; encoder throughput from the
+helper's `wchar` counter):
 
-Two questions, since your sink is R1 and ours is R2.2 (the caveat you raised):
+| configuration | encoder | air | heard |
+| --- | --- | --- | --- |
+| source type 0 (baseline) | 26.9 kB/s (40 pkt/s) | 27.3 kB/s (40 pkt/s), sustained | dead silence |
+| source type 2 + constant timestamp | 26.9 kB/s | 19 pkt/s for the first second, then 1-2 pkt/s | brief pops, no audio |
+| the same plus SSRC=0xA3 | 26.9 kB/s | 40 pkt/s for the first second, then collapse | no audio |
 
-1. Did the Px7 ever stop accepting data during your bring-up, or did source type 2
-   work first time?
-2. Do you know whether the R2/R2.2 wrapper changes the meaning of the source-type
-   bits? If source type 0 is what the offload path sets, it seems plausible that an
-   R2.2 sink expects the wrapper's own timing and that flipping the bit cannot
-   substitute for it.
+So source type 2 does get the sink decoding: we hear short, meaningless pops,
+which source type 0 never produces. But the link collapses one to two seconds in.
+During the collapsed phase a 10 s capture shows **zero** ACL packets on that
+handle while the controller still reports `Number of Completed Packets` events,
+i.e. the baseband stopped being acknowledged and the controller's queue is stuck.
+The encoder never stops producing.
 
-The option and the A/B harness are in our tree if useful: commit 455da1b in
-github.com/baizhu945/pipewire (`APTX_ADAPTIVE_TS_CONSTANT`, off by default), notes
-in research/aptx-adaptive-qemu/HANDOFF.md section 21.34.
+I also tried to change the packet period, since your HQ example is 672 samples
+(14 ms) and ours is 25 ms / 676 bytes:
+
+- `APTX_ADAPTIVE_CAP_EXT_VER=0` (new; forces a plain-R2 negotiation both in what
+  we advertise and in the negotiated result): the frame on the air stayed 680
+  bytes, i.e. still 25 ms.
+- AVDTP channel mode `joint` instead of `stereo`: same.
+
+So the period hypothesis is untested rather than disproved: in this build the
+period appears fixed at 25 ms whatever we do to ext-ver or channel mode.
+
+Two questions if you still have your notes. What did your Px7 advertise for
+`cap_ext_ver_num`, and what packet period did your stream use on the air? And when
+you saw the sink "taking data at about a third of real time", did it ever collapse
+completely, or did the constant timestamp cure the rate for you? If your sink is
+R1 and this one is R2.2, the difference may be the wrapper state we cannot feed:
+our R2.2 path waits for QHS/16-bit sideband feedback that a non-Qualcomm
+controller cannot provide, and with Lossless disabled we deliberately clear that
+capability bit so the wrapper does not enter that state.
+
+Raw data and write-ups: research/aptx-adaptive-qemu/STATUS.md sections 5, 6 and
+7.1-7.5, HANDOFF.md sections 21.34-21.38, branch research/aptx-adaptive-final.
