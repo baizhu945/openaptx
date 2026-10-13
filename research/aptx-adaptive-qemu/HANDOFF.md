@@ -2935,3 +2935,30 @@ R2 流，首字节即 `cap_ext_ver_num`）。把首字节从 `01` 改成 `00`
 **结论**：周期假设**仍未验证**，需要一次以 CIE 为目标的改动 + 重建。其余配方要素
 （source type 2 / 常值时间戳 / SSRC=HQ / 0x64 目标延迟）均已测，M5（R2.2）上
 表现为"第一秒满速、随后断流"。
+
+### 21.38 CIE 级 ext_ver 覆盖已实现并重建，但**周期仍不变** —— 该假设无可用杠杆
+
+**实现**：新增 `APTX_ADAPTIVE_CAP_EXT_VER`（0/1）。为 0 时同时改两处：广告出去的
+capabilities（`adaptive_init_caps`）与协商结果（在 `peer.cap_ext_ver_num != 0` 的分支后
+强制 `result.cap_ext_ver_num = 0` 并清零 features/setup_pref/eoc，镜像对端版本为 0 的路径）。
+提交 `4be0973` → 首次编译因 `get_cap_ext_ver()` 定义在使用点之后失败（**同一个坑第三次**）
+→ 修复 `eefe57e`（把定义移到 `adaptive_init_caps` 之前）。**这次先单独
+`nix-build -A config.services.pipewire.package` 验证编译通过再 switch**，避免了又一次
+让用户白跑重建 —— 这个顺序以后应当固定下来。
+
+**测试结果（完整配方 + `CAP_EXT_VER=0`）**：
+
+| 观察 | 结果 | 判据 |
+| --- | --- | --- |
+| 空口帧大小 | **`dlen 680`（676 B）** | 16 ms 应为 ~430 B ⇒ **周期未变** |
+| 逐秒 | t=0:3、t=1:22，随后归零 | 仍是"一秒满速后塌陷" |
+| codec | `aptx_adaptive` | 协商正常 |
+
+**再试 channel mode**（`APTX_ADAPTIVE_CHANNEL_MODE=joint`，旧笔记称 CAPI 模式可给 19 ms）：
+帧**仍是 `dlen 680`**，周期同样未变。
+
+**结论**：在本构建里，**编码器的 25 ms / 676 B 周期不受 ext_ver 与 AVDTP channel mode
+影响**（§5 里"`cap_ext_ver_num = 0` 给 16 ms"的记录无法通过这两条路径复现——可能是
+当年在别的配置下、或经由 R3/lossless 路径观察到的）。因此
+"**sink 期望标准 14/16/19 ms 周期**"这一假设**目前没有可用杠杆去验证**，除非深入改
+CAPI 模块/helper 的 profile 与周期处理（工程量远大于本轮）。
