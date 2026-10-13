@@ -2807,3 +2807,49 @@ SBC/AAC 以及本机 aptX HD 都清晰可见（11.5–21.5 %）。**§21.31 里�
 （在覆盖到的窗口内）。**限制**：6 个 20 MHz 窗口共约 120 MHz，未覆盖整个 5 GHz 波段；
 对照表明"Wi-Fi 量级"的发射会被看见（+12 dB），更弱的发射可能漏掉；
 且耳机内并无 5 GHz 射频（其蓝牙为 2.4 GHz），本假设本就先验概率很低。
+
+### 21.34 实测 theacrat 的配方（PR #16，2026-10-12）：在 R2.2（MOMENTUM 5）上**不成立**
+
+**背景**：`theacrat` 在 PR #16 报告，用 Realtek RTL8922 + B&W Px7 S2e（R1 sink）时，
+把 AVDTP 配置里"采样率/source type"字节的低 3 位从 `0x00` 改成 `0x02`（sink 自己做时序），
+并把 RTP 时间戳改成**常值**（每包每声道样本数），即可出声。他同时提示"只测了 R1 sink，
+MOMENTUM 5 / R2.2 可能不同"。
+
+**我们的历史结论与他的差异点**：我们早就试过 source type 2（当时是插件默认值），
+观察到"约 1 秒后 sink 停止接收（write 返回 EAGAIN）"，于是改回 0。**但当时配的是递增
+时间戳**——theacrat 的第 2 点恰好说 source type 2 下时间戳必须常值。这个组合我们从未测过。
+
+**实现**（本次新增）：`spa/plugins/bluez5/a2dp-codec-aptx-adaptive.c` 增加
+`APTX_ADAPTIVE_TS_CONSTANT`（默认关；命中时 `timestamp = this->source_frames`，
+即每声道样本数）。提交 `cd3882f`（首次编译因 `get_ts_constant()` 调用了后面才定义的
+`env_flag()` 而失败）→ 修复 `455da1b`；fork `baizhu945/pipewire` master 已推送，
+NixOS 模块 rev 更新为 `455da1b…`（新选项默认关，所以默认线上格式未变）。
+
+**受控 A/B**（同一运行环境、同一耳机、同一 440 Hz 音源、先重连耳机再选 AD）：
+
+| 配置 | 编码器产出（helper wchar） | **空口速率（hciconfig ACL）** | 听感 |
+| --- | --- | --- | --- |
+| `SOURCE_TYPE=0x02` + `TS_CONSTANT=1` | **26 887 B/s（40 包/秒）** | **~900 B/s（约 1.4 包/秒）** | 无声 |
+| `SOURCE_TYPE=0x00`（同环境对照） | 27 kB/s | **27 373 B/s（40 包/秒）** | 无声 |
+
+⇒ **卡死是 source type 2 造成的，与 quantum/传输环境无关**：编码器一直在正常产出
+（40 包/秒、676 B/包、25 ms 周期），但耳机侧停止接收，空口只剩 ~1.4 包/秒。
+
+**结论**：theacrat 的配方**在 MOMENTUM 5（R2.2）上无效**，且症状比他描述的更糟
+（R1 上是"出声"，R2.2 上是"链路卡死"）。他的 R1/R2.2 保留意见被证实。
+source type 0 + 递增时间戳仍是唯一能让 R2.2 sink 正常收流的组合（但仍静音）。
+
+**运维教训（本轮踩到的坑，值得记住）**：
+1. **区分"编码器饿着"与"耳机不收"**：读 helper 的 `rchar/wchar`（PCM 进 384 kB/s、
+   AD 出 26.9 kB/s 为健康）。编码器正常而空口低 ⇒ 传输/耳机侧问题；两者都低 ⇒
+   图/quantum 问题。这一条把本轮排查时间从小时级压到分钟级。
+2. **健康的 AD 流在 HCI 上就是 40 ACL 包/秒、约 27 kB/s**；`btmon` 里应看到
+   `< ACL: Handle 256 ... dlen 680`。任何显著低于此值的都是异常。
+3. **重启 PipeWire/WirePlumber 后传输所有权会残留**，表现为
+   `spa.bluez5: Acquire … returned error: org.bluez.Error.NotAuthorized`（或 `Failed`），
+   随后 WirePlumber 回落到 **HFP/CVSD**。解决办法：**重新 disconnect/connect 耳机**，
+   然后**立刻**选 `a2dp-sink` profile（用 `wpctl set-profile <card> 131093`），
+   并确认 `wpctl inspect <sink>` 的 `api.bluez5.codec` 为 `aptx_adaptive` 后再播放。
+4. **quantum 4800（100 ms）并不阻塞 AD 流**：对照那条在 quantum 4800、编码块 1200 的
+   情况下依然稳定 40 包/秒。§5 里"块大小必须等于 quantum"的说法在本轮未被复现出致命性
+   （仍可能影响时延/抖动，但不影响能否收流）。

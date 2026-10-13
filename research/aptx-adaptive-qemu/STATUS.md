@@ -354,6 +354,7 @@ The following hypotheses were tested and are **not** the cause of the silence:
 | AVRCP playback state | host says `Stopped`; HD plays anyway | not a gate |
 | Encoder emitting silence | live capture decodes to 440.1 Hz | real audio |
 | Wrong link rate | 44.1 kHz and 48 kHz, ordinary R2 form | silent |
+| Source type 2 + constant RTP timestamp (the recipe reported upstream in PR #16 for an R1 sink) | `SOURCE_TYPE=0x02` + `APTX_ADAPTIVE_TS_CONSTANT=1`; encoder still emits 40 packets/s (26.9 kB/s) | **link stalls**: air traffic collapses to ~1.4 packets/s, silent |
 | Capability advertisement | R2.2 bit set, encoder left on R2 | silent |
 | Byte-identical at 44.1 kHz | same element as the phone | silent |
 | Host volume / gain | transport `active`, volume 63/127 | not a gate |
