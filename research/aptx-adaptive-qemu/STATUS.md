@@ -743,6 +743,19 @@ for narrowband. One earlier observation is retracted with it: the "extra 5 to
 moving when a nearby transmitter was active. Raw RMS includes that DC term, so
 it invented a signal; DC-removed power and the mean power spectrum show none.
 
+The 5 GHz band was checked as well, because a proprietary link could in principle
+have moved there. The instrument was first validated on that band: this machine's
+Wi-Fi was associated on channel 44 (5220 MHz) a metre away, and a sustained
+download raised the received power in the window by **+9.5 dB** (median) and the
+mean power spectrum by **+12.4 dB**, so a Wi-Fi-strength emission at that range
+would have been seen. During Adaptive playback six 20 MHz windows across
+5180-5825 MHz showed nothing: the burst detector read 0.0 % at every centre, the
+power differences against idle ran from +0.4 to -5.7 dB with the playing legs
+*quieter*, and a strictly paired repeat at 5500 and 5745 MHz disagreed in sign
+(-4.3 dB and +1.9 dB). About 120 MHz of the band was covered rather than all of
+it, and the headset has no 5 GHz radio to begin with, so this closes a
+low-probability branch rather than a live one.
+
 Three caveats belong with the table. At centimetre range the receiver front end
 compresses (SBC measured 5.0 % there), so only the 30-50 cm rows are valid. The
 detector is deliberately narrowband, so it shows that Adaptive media is not
