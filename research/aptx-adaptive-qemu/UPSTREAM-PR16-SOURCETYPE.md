@@ -3,8 +3,7 @@ thread has had, so I spent today testing it end to end on a different sink. Shor
 version: on an R2.2 sink it does open the audio path, but the link dies within a
 second or two. Details below in case they help you or anyone else.
 
-Setup: Sennheiser MOMENTUM 5 (R2.2, ext-ver 1 in its capabilities) from an Intel
-AX210, stock BlueZ 5.87 and PipeWire 1.7.0 with our bridge, which runs the
+Setup: Sennheiser MOMENTUM 5 (an R2.2 sink) from an Intel AX210, stock BlueZ 5.87 and PipeWire 1.7.0 with our bridge, which runs the
 Qualcomm CAPI encoder under qemu-hexagon. The AVDTP configuration we send is
 byte-identical to what a Snapdragon phone sends to this headset.
 
