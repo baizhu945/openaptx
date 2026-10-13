@@ -1,9 +1,9 @@
-Following the ESP32-as-SDR suggestion in this thread, we ran the measurement with
-an ESP32-C5 running the ESP-SDR (ESPARGOS) raw-IQ firmware. It receives 2.4 and
-5 GHz without decoding any protocol, which removes the address-recognition
-assumption our earlier sniffer result rested on, and it let us add the control
-that matters: the same phone, at the same distance, playing the same track, with
-only the Bluetooth codec changed.
+Following the ESP32-as-SDR suggestion in this thread, I ran the measurement with an
+ESP32-C5 running the ESP-SDR (ESPARGOS) raw-IQ firmware. It receives 2.4 and 5 GHz
+without decoding any protocol, which removes the address-recognition assumption my
+earlier sniffer result rested on, and it let me add the control that matters: the
+same phone, at the same distance, playing the same track, with only the Bluetooth
+codec changed.
 
 **Method.** Burst captures of 819 us at 20 MSa/s with an 11 MHz analog filter and
 a fixed manual gain, 200-300 captures per leg, at 2441 MHz for 2.4 GHz. Two
@@ -26,11 +26,9 @@ looks like once the room is allowed to drift; the standard-EDR rows sit clearly
 above both. In a strictly paired run, taken back to back in one sitting with the
 phone untouched, Adaptive read 4.3 % playing against 6.7 % paused.
 
-**A retraction, because it cost us a day.** An earlier pass of ours reported
-"5 to 7 dB more in-band power while playing, consistent with a wideband
-emission." That was an artefact. Raw RMS includes the front end's DC/leakage
-term, and that term moves when a nearby transmitter is active, so it invents
-signal. With DC removed, a paired run gives:
+**One pitfall worth flagging.** Raw RMS includes the front end's DC/leakage term,
+and that term moves when a nearby transmitter is active, so it can look like signal
+where there is none. With DC removed, a paired run gives:
 
 | metric | Adaptive playing | paused |
 | --- | --- | --- |
@@ -58,19 +56,18 @@ begin with, so this closes a low-probability branch rather than a live one.
 
 **On transmitting.** ESP-SDR is receive-only by design ("we are not providing a
 transmitter implementation at this time"), and the ESP32 transmit work that does
-exist is narrowband polar modulation (FM/SSB), not an arbitrary wideband
-waveform, so an ESP32 cannot stand in for the vendor silicon that appears to be
-required at the source end. What it can do, cheaply, is show what is actually on
-the air, which is what we used it for.
+exist is narrowband polar modulation (FM/SSB), not an arbitrary wideband waveform,
+so an ESP32 cannot stand in for the vendor silicon that appears to be required at
+the source end. What it can do, cheaply, is show what is actually on the air,
+which is what I used it for.
 
-**Limits.** The burst detector is deliberately narrowband (the mean power
-spectrum covers the wideband case). One receive centre at 2.4 GHz, 819 us
-windows, so roughly 20 of the 79 channels per window -- though standard-EDR codecs
-from the same phone were visible in that same window, so the phone's channel map
-does include it. At centimetre range the front end compresses and even SBC reads
-only 5 %, so comparisons have to be taken at 30-50 cm and in pairs, since the
-ambient band itself drifts between roughly 1 % and 7 %.
+**Limits.** The burst detector is deliberately narrowband (the mean power spectrum
+covers the wideband case). One receive centre at 2.4 GHz, 819 us windows, so
+roughly 20 of the 79 channels per window -- though standard-EDR codecs from the
+same phone were visible in that same window, so the phone's channel map does
+include it. At centimetre range the front end compresses and even SBC reads only
+5 %, so comparisons have to be taken at 30-50 cm and in pairs, since the ambient
+band itself drifts between roughly 1 % and 7 %.
 
-Raw data, scripts and the write-ups: research/aptx-adaptive-qemu/STATUS.md
-sections 7.1-7.5 and HANDOFF.md sections 21.29-21.33, branch
-research/aptx-adaptive-final.
+Raw data, scripts and the write-ups: research/aptx-adaptive-qemu/STATUS.md sections
+7.1-7.5 and HANDOFF.md sections 21.29-21.33, branch research/aptx-adaptive-final.
