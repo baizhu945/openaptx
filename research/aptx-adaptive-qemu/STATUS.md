@@ -77,6 +77,11 @@ What is now proven:
    0.7 to 1.6 hits/s, this host's own Adaptive stream at 0.52 hits/s, and the
    same link idle at 0.02 hits/s. Had the phone's link emitted like the control,
    215 to 460 hits were expected (section 7.3).
+8. **The working sources never send Adaptive media from the host.** The
+   phone's HCI log has no L2CAP media packets at all; right after AVDTP Start
+   it hands the A2DP configuration to its Qualcomm controller with one vendor
+   command (`0xFC0A`, 66 bytes, containing the byte-identical SET_CONFIG).
+   Encoding and transmission then happen inside the chip.
 9. **The same phone, at the same distance, is plainly visible with a standard
    codec and invisible with Adaptive.** A raw-IQ receiver (ESP32-C5 running
    ESP-SDR) that decodes no protocol at all sees the phone's SBC link in 21.5 %
@@ -85,11 +90,6 @@ What is now proven:
    the ambient band: repeat passes read 3.0 to 10.5 %, silence reads 2.5 to
    6.7 %, and a paired play/pause run read 4.3 % playing against 6.7 % paused.
    This removes the address-recognition assumption from finding 7 (section 7.5).
-8. **The working sources never send Adaptive media from the host.** The
-   phone's HCI log has no L2CAP media packets at all; right after AVDTP Start
-   it hands the A2DP configuration to its Qualcomm controller with one vendor
-   command (`0xFC0A`, 66 bytes, containing the byte-identical SET_CONFIG).
-   Encoding and transmission then happen inside the chip.
 
 What is settled: the bitstream, the AVDTP element, the wire format, the volume
 and the negotiation are all fine, so the rejection is at the link. What is
@@ -348,13 +348,13 @@ The following hypotheses were tested and are **not** the cause of the silence:
 | Wrong sample rate | 96 kHz end-to-end (`SOURCE_TYPE_1` + `0x92`) | silent |
 | Missing R2.2 version byte | replay with version `0xaf` | silent |
 | Wrong R2.2 shape | 760-byte frame, `0xaf`, `channel_mode 0xa0` | silent |
-| R2.2 form, streamed live | continuous packet type 5, 760-byte frames | silent |
+| R2.2 form, streamed live | packet type 5, 760-byte frames | silent |
 | Discontinuous stream | 30 s continuous stream, zero gaps > 60 ms | normal |
 | Source device class | adapter CoD = "smartphone" (`0x5a020c`) | silent |
 | AVRCP playback state | host says `Stopped`; HD plays anyway | not a gate |
 | Encoder emitting silence | live capture decodes to 440.1 Hz | real audio |
 | Wrong link rate | 44.1 kHz and 48 kHz, ordinary R2 form | silent |
-| Source type 2 + constant RTP timestamp (the recipe reported upstream in PR #16 for an R1 sink) | `SOURCE_TYPE=0x02` + `APTX_ADAPTIVE_TS_CONSTANT=1`; encoder still emits 40 packets/s (26.9 kB/s) | **link stalls**: air traffic collapses to ~1.4 packets/s, silent |
+| Source type 2 + const timestamp | air collapses to ~1.4 pkt/s | **stalls** |
 | Capability advertisement | R2.2 bit set, encoder left on R2 | silent |
 | Byte-identical at 44.1 kHz | same element as the phone | silent |
 | Host volume / gain | transport `active`, volume 63/127 | not a gate |
@@ -712,7 +712,7 @@ filter and a fixed manual gain.
 | --- | --- | --- | --- |
 | phone, SBC, 30-50 cm (standard EDR) | **43/200 = 21.5 %** | 5.85 | 5e-09 |
 | phone, AAC, 30-50 cm (standard EDR) | **23/200 = 11.5 %** | 3.53 | 4e-04 |
-| this host, aptX HD, ~0.5 m (standard EDR) | **32/200 = 16.0 %** | 4.66 | 3e-06 |
+| this host, HD, 0.5 m (standard EDR) | **32/200 = 16.0 %** | 4.66 | 3e-06 |
 | **phone, aptX Adaptive, 30-50 cm** | **6/200 = 3.0 %** | **0.31** | **0.76** |
 | nothing playing | 5/200 = 2.5 % | - | - |
 
@@ -762,7 +762,8 @@ compresses (SBC measured 5.0 % there), so only the 30-50 cm rows are valid. The
 detector is deliberately narrowband, so it shows that Adaptive media is not
 standard-EDR bursts; it does not by itself exclude a wideband emission in the
 same band, which needs a multi-scale detector and is now covered: the mean power
-spectrum shows nothing. And the ESP32 initially sat on the machine under test, so this host's own Wi-Fi and Bluetooth
+spectrum shows nothing. And the ESP32 initially sat on the machine under test,
+so this host's own Wi-Fi and Bluetooth
 are in-band interferers whose traffic varies with whatever the machine is doing;
 they have to be held constant across a comparison, or the receiver moved away
 from them. The 5 GHz band has not been checked either.
@@ -989,7 +990,7 @@ produced a list of every untried lever, and all of them were then measured with
 a reproducible rig (write drop-in -> restart -> `preflight.sh --fix` -> 15 s
 btmon capture -> per-second ACL-TX counts; see HANDOFF section 21.40-21.41).
 
-**Two decisive negatives**
+### Two decisive negatives
 
 1. **Replaying the phone's own bitstream fails identically.** `APTX_ADAPTIVE_REPLAY`
    with 664-byte records built from the reference 48 kHz segment (frames
@@ -1041,10 +1042,12 @@ header**, and its tests assert exactly that length.
 
 Working configuration (existing switches only, deployed plugin unchanged):
 
-    APTX_ADAPTIVE_SOURCE_TYPE=0x02
-    APTX_ADAPTIVE_TS_CONSTANT=1
-    APTX_ADAPTIVE_SSRC=0xA3
-    APTX_ADAPTIVE_STRIP_OTA=1
+```sh
+APTX_ADAPTIVE_SOURCE_TYPE=0x02
+APTX_ADAPTIVE_TS_CONSTANT=1
+APTX_ADAPTIVE_SSRC=0xA3
+APTX_ADAPTIVE_STRIP_OTA=1
+```
 
 Measured on the MOMENTUM 5: 60.8 s at a constant 40.0 packets/s (26.9 kB/s),
 zero dropouts, `dlen 672` (668-byte payload), RTP `80 60`, constant timestamp
@@ -1070,7 +1073,7 @@ the low-latency rows (220k/12 ms, 270k/10 ms) need the clean-room encoder from
 theacrat/aptx-linux, which builds on this machine against the same vendor
 library (SHA-256 `1ac8815…`, the hash its README lists as known-good).
 
-## 15. 2026-10-15: aptX Lossless — prerequisites cleared, the lossless form is still rejected
+## 15. 2026-10-15: Lossless prerequisites cleared, the form still rejected
 
 With the container-header fix in place, two lossless prerequisites were verified
 for the first time: plain 44.1 kHz stereo sustains 40.1 packets/s, and
@@ -1115,11 +1118,11 @@ directory) changed nothing - the sink still stopped after 1.95 s.
 More useful, Qualcomm's own reference toolchain (the PR #9 binaries, run under
 Wine) is now a working oracle:
 
-- our R2 payload (656 bytes, no container header) cleans with zero sync losses
+* our R2 payload (656 bytes, no container header) cleans with zero sync losses
   and `test-decoder.exe` locks and produces a 264 KB WAV - **independent
   confirmation that the container header must not be on the wire**;
-- the same payload *with* the 8-byte header loses sync and fails;
-- our lossless payload (760 bytes) produces zero-byte output in the cleaner, in
+* the same payload *with* the 8-byte header loses sync and fails;
+* our lossless payload (760 bytes) produces zero-byte output in the cleaner, in
   `slimbus2aptx-adaptive3` (R3 OTA to AX3) and in `test-stream-deinterleave`.
 
 So the R2.2 wrapper's lossless-candidate output (packet type 5, channel byte
@@ -1188,4 +1191,3 @@ output; the "lossless rate" and "converter accepted it" readings are withdrawn
 (bitrate x period, e.g. ~2040 bytes for 1 Mbps at 16.3 ms), which has to be
 computed rather than read. Until that is settled the R3 output must not go to
 real hardware.
-

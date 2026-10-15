@@ -1,9 +1,10 @@
-compat: SPA codec ABI 17 (PipeWire 1.7)
+# compat: SPA codec ABI 17 (PipeWire 1.7)
 
 PipeWire 1.7 raises the bluez5 codec ABI to 17. Against 1.7 the plugin is
 rejected at load time with
 
-    codec plugin api.codec.bluez5.media.aptx has incompatible ABI version (16 != 17)
+    codec plugin api.codec.bluez5.media.aptx has incompatible ABI version
+    (16 != 17)
 
 and the headset then falls back to HFP/CVSD, so the plugin never gets a chance
 to negotiate aptX Adaptive.

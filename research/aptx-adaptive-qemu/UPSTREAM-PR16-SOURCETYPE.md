@@ -1,3 +1,5 @@
+# Reply: source type 2 alone does not make the sink play
+
 Thanks for the recipe. The source-type observation is the most useful lead this
 thread has had, so I spent today testing it end to end on a different sink. Short
 version: on an R2.2 sink it does open the audio path, but the link dies within a
@@ -26,9 +28,9 @@ helper's `wchar` counter):
 
 | configuration | encoder | air | heard |
 | --- | --- | --- | --- |
-| source type 0 (baseline) | 26.9 kB/s (40 pkt/s) | 27.3 kB/s (40 pkt/s), sustained | dead silence |
-| source type 2 + constant timestamp | 26.9 kB/s | 19 pkt/s for the first second, then 1-2 pkt/s | brief pops, no audio |
-| the same plus SSRC=0xA3 | 26.9 kB/s | 40 pkt/s for the first second, then collapse | no audio |
+| source type 0 | 26.9 kB/s (40 pkt/s) | 27.3 kB/s, sustained | dead silence |
+| source type 2 + const ts | 26.9 kB/s | 19 pkt/s, then 1-2 pkt/s | brief pops |
+| source 2 + SSRC=0xA3 | 26.9 kB/s | 40 pkt/s, then collapse | no audio |
 
 So source type 2 does get the sink decoding: we hear short, meaningless pops,
 which source type 0 never produces. But the link collapses one to two seconds in.

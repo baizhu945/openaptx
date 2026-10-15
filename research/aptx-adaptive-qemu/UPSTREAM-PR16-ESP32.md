@@ -1,6 +1,10 @@
-Following the ESP32-as-SDR suggestion in this thread, I ran the measurement with an
-ESP32-C5 running the ESP-SDR (ESPARGOS) raw-IQ firmware. It receives 2.4 and 5 GHz
-without decoding any protocol, which removes the address-recognition assumption my
+# ESP32-SDR check: the phone's Adaptive link stays invisible
+
+Following the ESP32-as-SDR suggestion in this thread, I ran the measurement
+with an ESP32-C5 running the ESP-SDR (ESPARGOS) raw-IQ firmware. It receives
+2.4 and 5 GHz
+without decoding any protocol, which removes the address-recognition
+assumption my
 earlier sniffer result rested on, and it let me add the control that matters: the
 same phone, at the same distance, playing the same track, with only the Bluetooth
 codec changed.
@@ -11,14 +15,14 @@ statistics per capture: the rise of a 1 MHz band over its own 8 MHz neighbourhoo
 ("burst", a narrowband detector), and DC-removed power. A power-domain mean
 spectrum is accumulated as well, since it responds to wideband energy too.
 
-**2.4 GHz, phone at 30-50 cm, only the codec changed**
+## 2.4 GHz, phone at 30-50 cm, only the codec changed
 
 | state | captures with a burst >6 dB |
 | --- | --- |
 | phone, SBC (standard EDR) | 43/200 = 21.5 % |
 | phone, AAC 44.1 kHz (standard EDR) | 23/200 = 11.5 % |
 | this host, aptX HD at ~0.5 m (standard EDR) | 32/200 = 16.0 % |
-| phone, aptX Adaptive | 6/200 = 3.0 % (repeat passes: 6.5 %, 9.5 %, 10.5 %, 4.3 %) |
+| phone, aptX Adaptive | 6/200 = 3.0 % (passes: 6.5, 9.5, 10.5, 4.3 %) |
 | silence | 5/200 = 2.5 % (repeat: 2.5 %, 6.7 %, 1.3 %) |
 
 The Adaptive passes scatter and overlap the silence passes, which is what a null

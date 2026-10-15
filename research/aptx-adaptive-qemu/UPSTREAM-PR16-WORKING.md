@@ -1,4 +1,4 @@
-Solved on an R2.2 sink — the payload had an extra 8-byte container header
+# Solved on an R2.2 sink: drop the extra 8-byte container header
 
 Short version: on the Sennheiser MOMENTUM 5 (R2.2) the stream now plays, and the
 cause of the year-long silence was not the codec, the link or the sink firmware
@@ -8,7 +8,7 @@ belongs to the controller *offload* framing. A host-side encoder must send the
 codec packet directly after the 12-byte RTP header.
 
 Credit where it is due: this fell out of reading theacrat's published
-implementation and specs (https://github.com/theacrat/aptx-linux,
+implementation and specs (<https://github.com/theacrat/aptx-linux>,
 `spec/a2dp-integration.md` §7D/§7F, "Every media packet is 668 bytes: a 12-byte
 RTP header followed directly by the 656-byte codec packet. There is no separate
 8-byte header in the payload."), which is also consistent with the Qualcomm ADK's
@@ -19,8 +19,8 @@ encoder under qemu-hexagon, MOMENTUM 5):
 
 | payload on air | L2CAP payload | air rate | result |
 | --- | --- | --- | --- |
-| RTP + 8-byte container + 656-byte frame | 676 B | 40 pkt/s for 1 s, then ~1-2 pkt/s | sink stops acknowledging; silence or brief pops |
-| RTP + 656-byte frame | 668 B | 40.0 pkt/s sustained for 60.8 s, 26.9 kB/s | **plays** |
+| RTP + container + 656-byte frame | 676 B | stalls after 1 s | silence |
+| RTP + 656-byte frame | 668 B | 40.0 pkt/s for 60.8 s, 26.9 kB/s | **plays** |
 
 The stripped form is the only change; the encoder, the negotiated configuration
 and the rest of the packet are the same. Everything else I reported earlier

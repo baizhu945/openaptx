@@ -5,7 +5,8 @@ Windows 11 25H2 ISOs (x86_64 and ARM64) to find out what "aptX Adaptive is only
 supported on select Windows devices with compatible Qualcomm Bluetooth radios"
 means in practice. The short version: **Windows ships the framework, not the codec,
 and the framework needs hardware a PC Bluetooth card does not have.** It is a third,
-independent confirmation of the conclusion in the previous comment -- this time from
+independent confirmation of the conclusion in the previous comment -- this
+time from
 Microsoft's own binaries and documentation rather than from Qualcomm's.
 
 ## What is in the images
@@ -42,7 +43,8 @@ state (`BtaMpmUpdatePlayStatus` / `BtaMpmUpdateSuspendStatus`).
 (Windows 11 build 10.0.22000 and later) describes the mechanism:
 
 - Audio reaches the controller "through an alternate path rather than the normal
-  controller interface (the HCI)". That path is "often an I2S or PCM interface, but
+  controller interface (the HCI)". That path is "often an I2S or PCM
+  interface, but
   can also be a richer, more complex bus such as SLIMbus ... or potentially
   SoundWire".
 - The codec "is implemented in the audio DSP and/or Bluetooth
@@ -80,10 +82,12 @@ All but the first share the `HCI_VS_MSFT_Avdtp_` prefix.
 | `Suspend` (0x0A) | offload handle | status |
 | `Close` (0x0B) | offload handle | status |
 
-1. The radio driver publishes `VsMsftOpCode`; Windows reads the feature bitmap; the
+1. The radio driver publishes `VsMsftOpCode`; Windows reads the feature
+   bitmap; the
    IHV audio driver publishes the sideband interface.
 2. Codec capabilities are exchanged: the profile driver sends the audio side's
-   codecs to the controller and receives the controller's list. If both provide a
+   codecs to the controller and receives the controller's list. If both
+   provide a
    list, **Windows uses only the controller's**.
 3. Normal AVDTP negotiation selects the codec and opens the L2CAP media
    channel. The profile driver already knows whether it is sideband.
