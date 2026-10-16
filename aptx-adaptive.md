@@ -164,9 +164,9 @@ Measured on the MOMENTUM 5 with `bluez5.default.rate`:
 | --- | --- |
 | 48000 | 435 kbps, 12 ms packets |
 | 96000 | 616-646 kbps, 8 ms packets |
-| 44100 | **falls back to 48000** |
+| 44100 | 443 kbps, 12 ms packets, **needs the fix below** |
 
-**Limitation: 44.1 kHz is not reachable with this headset.** The sink
+**44.1 kHz needs a fix in the encoder, and the fix is two lines.** The sink
 advertises its rates in one byte whose value here is `0x71`:
 
 ```text
@@ -175,12 +175,34 @@ d7 00 00 00 ad 00 71 0a 37 6a c8 7d 64 7d 00 01 82 00 00 0f
 ```
 
 `0x40` is how this headset encodes 44.1 kHz, while the encoder only recognises
-`0x08` for 44.1 kHz, so 44.1 kHz never survives the intersection and the link
-falls back to 48 kHz. Qualcomm's own stack uses the `0x40` encoding, which is
-why a phone offers all three rates against the same headset. Public sources
-disagree on this bit (theacrat/aptx-linux marks it `UNCERTAIN` and lists a
-variant that uses `0x40`), so the evidence above is offered rather than a
-conclusion. 48 and 96 kHz are unaffected.
+`0x08` for it, so 44.1 kHz is never in the intersection and the link falls back
+to 48 kHz. Qualcomm's own stack uses the `0x40` encoding, which is why a phone
+offers all three rates against the same headset, and this repository's own CAPI
+codec uses `0x40` for 44.1 kHz as well. Public sources disagree on the bit
+(theacrat/aptx-linux marks it `UNCERTAIN` and lists a variant that uses
+`0x40`).
+
+The encoder also excludes 44.1 kHz on a 2.2 sink on purpose, because that is
+the reference's Lossless configuration (R3 encoder). With the vendor's R2
+kernel the rate is still encodable as config 3, so both exclusions can be
+lifted:
+
+```text
+const RATE_44K_ALT: u8 = 0x40;          // accept the alternate encoding
+const SUPPORTED_RATES: [(u32, u8); 4] = [
+    (48_000, RATE_48K), (44_100, RATE_44K),
+    (96_000, RATE_96K), (44_100, RATE_44K_ALT),
+];
+// and let the 2.2 branch offer 44.1 kHz as well
+```
+
+With that change the link negotiates 44.1 kHz - the outgoing configuration
+element carries `0x42` (`0x40 | source type host`) - and it ran for 35.8 s at a
+steady 11.97 ms, 668-byte packets and 443 kbps, with adaptive bitrate walking
+270k -> 427k. Audible confirmation of that configuration is still pending, so
+it is recorded here as measured on the wire rather than as a finished result.
+The host configuration keeps 48 kHz as its default in any case, because 96 kHz
+cannot run the low-latency profile.
 
 ## Status: what does not work yet
 
