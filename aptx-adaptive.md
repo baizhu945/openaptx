@@ -199,10 +199,12 @@ const SUPPORTED_RATES: [(u32, u8); 4] = [
 With that change the link negotiates 44.1 kHz - the outgoing configuration
 element carries `0x42` (`0x40 | source type host`) - and it ran for 35.8 s at a
 steady 11.97 ms, 668-byte packets and 443 kbps, with adaptive bitrate walking
-270k -> 427k. Audible confirmation of that configuration is still pending, so
-it is recorded here as measured on the wire rather than as a finished result.
-The host configuration keeps 48 kHz as its default in any case, because 96 kHz
-cannot run the low-latency profile.
+270k -> 427k. Playback of that configuration was confirmed by ear as well, so
+44.1 kHz is usable on this hardware; the fix lives in a fork of the encoder
+(upstream is read-only and unmaintained), not upstream. The host configuration
+keeps 48 kHz as its default in any case, because 96 kHz cannot run the
+low-latency profile, and switching the rate restarts the monitor and briefly
+interrupts audio.
 
 ## Status: what does not work yet
 
