@@ -144,6 +144,44 @@ These were established by measurement, not from a specification:
 * Channel-mode bytes observed in the wild are `0x00`, `0x80`, `0xa0` and
   `0xc0`; only those four are accepted by the reference decoder.
 
+## Sample rates
+
+The encoder implements 44100, 48000 and 96000 Hz (`88_200` only through its
+API, not on the wire), and it refuses the low-latency profile at 88.2/96 kHz:
+96 kHz runs HQ with a different bitrate table.
+
+The rate is negotiated, not configured on the link: PipeWire's bluez5 monitor
+offers one preferred rate - `bluez5.default.rate`, 48000 by default, read once
+when the monitor starts - and the encoder picks it out of the intersection of
+the peer's advertised rates and its own table, falling back to the first entry
+of its table (48 kHz) when the preferred rate is not in that intersection. The
+codec configuration is chosen when the transport is set up, so change the
+setting, restart WirePlumber and reconnect the headset.
+
+Measured on the MOMENTUM 5 with `bluez5.default.rate`:
+
+| Rate | On air |
+| --- | --- |
+| 48000 | 435 kbps, 12 ms packets |
+| 96000 | 616-646 kbps, 8 ms packets |
+| 44100 | **falls back to 48000** |
+
+**Limitation: 44.1 kHz is not reachable with this headset.** The sink
+advertises its rates in one byte whose value here is `0x71`:
+
+```text
+d7 00 00 00 ad 00 71 0a 37 6a c8 7d 64 7d 00 01 82 00 00 0f
+                  ^^ rate byte: 0x40 | 0x20 (96k) | 0x10 (48k)
+```
+
+`0x40` is how this headset encodes 44.1 kHz, while the encoder only recognises
+`0x08` for 44.1 kHz, so 44.1 kHz never survives the intersection and the link
+falls back to 48 kHz. Qualcomm's own stack uses the `0x40` encoding, which is
+why a phone offers all three rates against the same headset. Public sources
+disagree on this bit (theacrat/aptx-linux marks it `UNCERTAIN` and lists a
+variant that uses `0x40`), so the evidence above is offered rather than a
+conclusion. 48 and 96 kHz are unaffected.
+
 ## Status: what does not work yet
 
 **aptX Lossless.** The sink supports it - a FiiO BT11 (QCC5181) reports
